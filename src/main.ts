@@ -3,8 +3,8 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
 const config = new DocumentBuilder()
-  .setTitle("Manoel's API")
-  .setDescription('Pequeno documento do grande Manoel (e sua API)')
+  .setTitle("theGuarantors' Address Processing API")
+  .setDescription('Address processing API')
   .setVersion('1.0')
   .build();
 

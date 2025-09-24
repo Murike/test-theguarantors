@@ -1,118 +1,48 @@
 import { Injectable } from '@nestjs/common';
-import type { EntradaDto } from './shared/dto/entrada.dto';
-import type { SaidaDto, Caixa } from './shared/dto/saida.dto';
-import { caixas } from './shared/data/caixas';
-import {
-  Container,
-  Item,
-  PackingService,
-  ContainerPackingResult,
-} from '3d-bin-packing-ts';
+import type { AddressDto } from './shared/dto/address.dto';
+import { ValidatedAddressDto } from './shared/dto/validatedAddress.dto';
+import * as addressIt from 'addressit';
+import { extractAddressLLM } from './shared/llm/llm.module';
+import { confirmAddressGeoapify } from './shared/geoapify';
 
 @Injectable()
-export class AppService {
-  provisionOrderBoxes(pedidos: EntradaDto): SaidaDto {
-    const resultadoPedidos: SaidaDto = { pedidos: [] };
-    const caixasDisponiveis: Container[] = [];
-    for (const caixaTipo of caixas) {
-      caixasDisponiveis.push(
-        new Container(
-          caixaTipo.caixa_id,
-          caixaTipo.dimensoes.largura,
-          caixaTipo.dimensoes.altura,
-          caixaTipo.dimensoes.comprimento,
-        ),
-      );
-    }
-
-    for (const pedido of pedidos.pedidos) {
-      const items: Item[] = [];
-      for (const produto of pedido.produtos) {
-        const item = new Item(
-          produto.produto_id,
-          produto.dimensoes.largura,
-          produto.dimensoes.altura,
-          produto.dimensoes.comprimento,
-          1,
-        );
-        items.push(item);
-      }
-
-      const caixasUsadas = this.findBestBoxConfiguration(
-        items,
-        caixasDisponiveis,
-      );
-
-      resultadoPedidos.pedidos.push({
-        pedido_id: pedido.pedido_id.toString(),
-        caixas: caixasUsadas,
-      });
-    }
-
-    return resultadoPedidos;
+export class AppService { 
+  async validateAddress(address: AddressDto): Promise<ValidatedAddressDto> {
+    
+    const parsedAddress = await this.parseText(address.address);
+    const validatedAddress = this.validateText(parsedAddress, address.address);
+    // const refinedAddress = await this.refineText(parsedAddress, address.address);
+    
+    return new ValidatedAddressDto();
   }
 
-  private findBestBoxConfiguration(
-    items: Item[],
-    caixasDisponiveis: Container[],
-  ): Caixa[] {
-    const solution: Caixa[] = [];
-    let temporarySolution: Caixa | null = null;
-    let packingResult: ContainerPackingResult | null = null;
+  private async parseText(address: string): Promise<ValidatedAddressDto> {
+    const parsedAddress = addressIt.default(address);
+    
+    console.log("parsedAddress: ", parsedAddress);
 
-    while (items.length > 0) {
-      for (const caixa of caixasDisponiveis) {
-        packingResult = PackingService.packSingle(caixa, items);
+    const parsedText: ValidatedAddressDto = {
+      street: parsedAddress.street || '',
+      complement: parsedAddress.complement || '',
+      neighbourhood: parsedAddress.neighbourhood || '',
+      number: parsedAddress.number || 0,
+      city: parsedAddress.city || '',
+      state: parsedAddress.state || '',
+      zipCode: parsedAddress.postalcode || '',
+      type: 'unknown',
+      validationStatus: 'parsed'
+    };
 
-        temporarySolution = {
-          caixa_id: caixa.id,
-          produtos: packingResult.algorithmPackingResults[0].packedItems.map(
-            (produto) => produto.id,
-          ),
-        };
+    return new ValidatedAddressDto();
+  }
 
-        if (packingResult.algorithmPackingResults[0].isCompletePacked) {
-          solution.push(temporarySolution);
-          items = [];
-          break;
-        }
-      }
+  private async refineText(address: ValidatedAddressDto, original: string): Promise<ValidatedAddressDto> {
+    const refinedAddress: ValidatedAddressDto = await extractAddressLLM(address, original);  
+    return new ValidatedAddressDto();
+  }
 
-      if (
-        packingResult &&
-        packingResult?.algorithmPackingResults[0].packedItems.length == 0
-      ) {
-        solution.push({
-          caixa_id: null,
-          produtos: packingResult.algorithmPackingResults[0].unpackedItems.map(
-            (produto) => produto.id,
-          ),
-          observacao: 'Produtos não couberam nas caixas disponíveis',
-        });
-
-        break;
-      }
-
-      if (
-        packingResult &&
-        temporarySolution &&
-        !packingResult?.algorithmPackingResults[0].isCompletePacked &&
-        packingResult?.algorithmPackingResults[0].packedItems.length > 0
-      ) {
-        solution.push(temporarySolution);
-        const packedItems =
-          packingResult?.algorithmPackingResults[0].packedItems || [];
-
-        for (const packedItem of packedItems) {
-          const productIndex = items.findIndex(
-            (item) => item.id === packedItem.id,
-          );
-
-          items.splice(productIndex, 1);
-        }
-      }
-    }
-
-    return solution;
+  private async validateText(address: ValidatedAddressDto, original: string): Promise<ValidatedAddressDto> {
+    await confirmAddressGeoapify(address, original);
+    return new ValidatedAddressDto();
   }
 }
