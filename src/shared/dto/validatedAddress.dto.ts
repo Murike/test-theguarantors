@@ -9,7 +9,7 @@ export const ValidatedAddressSchema = z.object({
 	city: z.string(),
 	state: z.string(),
 	zipCode: z.string(),
-	type: z.enum(['house', 'apartment', 'unknown']),
+	type: z.enum(['house', 'apartment', 'po_box', 'unknown']),
 	validationStatus: z.enum(['valid', 'corrected', 'unverifiable', 'parsed'])
 });
 
