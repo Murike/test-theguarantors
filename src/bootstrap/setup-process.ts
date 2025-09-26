@@ -1,9 +1,9 @@
 import type { INestApplication } from '@nestjs/common';
-import { PinoLogger } from 'nestjs-pino';
+import { Logger } from 'nestjs-pino';
 
-export function setupProcessHandlers(app: INestApplication) {
+export async function setupProcessHandlers(app: INestApplication) {
   // Process-level safety nets and graceful shutdown
-  const logger = app.get(PinoLogger);
+  const logger = await app.resolve(Logger);
   const isProd = process.env.NODE_ENV === 'production';
 
   process.on('unhandledRejection', (reason: any) => {

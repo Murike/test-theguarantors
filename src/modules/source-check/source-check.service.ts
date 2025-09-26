@@ -3,7 +3,7 @@ import type { ValidatedAddressDto } from '@common/dto/validatedAddress.dto';
 import type { SourceCheckProvider, SourceCheckResult } from './source-check.types';
 import { mapToValidatedAddress } from './mapping/validated-address.mapper';
 import { normalizeValidatedAddress } from '@common/utils/address/normalization';
-import { PinoLogger } from 'nestjs-pino';
+import { PinoLogger, InjectPinoLogger } from 'nestjs-pino';
 
 export const SOURCE_CHECK_PROVIDER_TOKEN = 'SOURCE_CHECK_PROVIDER_TOKEN';
 
@@ -12,10 +12,9 @@ export class SourceCheckOrchestratorService {
   constructor(
     @Inject(SOURCE_CHECK_PROVIDER_TOKEN)
     private readonly provider: SourceCheckProvider,
+    @InjectPinoLogger(SourceCheckOrchestratorService.name)
     private readonly logger: PinoLogger,
-  ) {
-    this.logger.setContext(SourceCheckOrchestratorService.name);
-  }
+  ) {}
 
   async checkAddress(original: string, hint?: ValidatedAddressDto): Promise<SourceCheckResult> {
     const res = await this.provider.checkAddress(original, hint);

@@ -13,13 +13,13 @@ const config = new DocumentBuilder()
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
-  app.useLogger(app.get(Logger));
+  app.useLogger(await app.resolve(Logger));
   app.useGlobalFilters(app.get(GlobalExceptionFilter));
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 
-  setupProcessHandlers(app);
+  await setupProcessHandlers(app);
 
   await app.listen(process.env.PORT ?? 3000);
 }
