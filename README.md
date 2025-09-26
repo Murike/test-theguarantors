@@ -2,13 +2,13 @@
 
 ## Initializing
 
-Node.js and Docker are required to run this project. OpenAI LLM processing requires api key (variable `OA_API_KEY`), model can be changed by adding name in `OA_MODEL`, and Geoapify requires api key (variable `GA_API_KEY`). Service runs without those, but depends on parsing alone, which works poorly unless text is very well formated.
+Node.js and Docker are required to run this project. OpenAI LLM processing requires api key (variable `OA_API_KEY`), model can be changed by adding name in `OA_MODEL`, and Geoapify requires api key (variable `GA_API_KEY`). Service runs without those, but depends on parsing alone, which works poorly unless text is very well formed.
 
 ```bash
 $ npm run docker:start
 ```
 
-The API will be available at http://localhost:3000.
+The API will be available at http://localhost:3000. Swagger documentation is available at http://localhost:3000/api.
 
 
 ## Stack
@@ -21,7 +21,7 @@ The API will be available at http://localhost:3000.
 
 
 ## Dev tools
-- Windsurf for IDE
+- Windsurf for IDE (mostly GPT-5 low reasoning)
 - Perplexity for general research
 - Bruno for API testing
 
