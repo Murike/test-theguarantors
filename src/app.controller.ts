@@ -1,8 +1,8 @@
 import { Controller, Post, Body, UsePipes } from '@nestjs/common';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { AppService } from './app.service';
-import { AddressDto } from './shared/dto/address.dto';
-import type { ValidatedAddressDto } from './shared/dto/validatedAddress.dto';
+import { AddressDto } from './common/dto/address.dto';
+import type { ValidatedAddressDto } from './common/dto/validatedAddress.dto';
 import { ApiOperation } from '@nestjs/swagger';
 
 @Controller()

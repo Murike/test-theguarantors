@@ -1,76 +1,65 @@
 import { Injectable } from '@nestjs/common';
-import type { AddressDto } from './shared/dto/address.dto';
-import { ValidatedAddressDto } from './shared/dto/validatedAddress.dto';
-import * as addressIt from 'addressit';
-import { LlmOrchestratorService } from './shared/llm/core/llm.service';
-import { SourceCheckOrchestratorService } from './shared/source-check/core/source-check.service';
-// import { ConciliationService } from './shared/conciliation/core/conciliation.service';
+import type { AddressDto } from './common/dto/address.dto';
+import { ValidatedAddressDto } from './common/dto/validatedAddress.dto';
+import { LlmOrchestratorService } from './modules/llm/llm.service';
+import { SourceCheckOrchestratorService } from './modules/source-check/source-check.service';
+import { ParsingService } from './modules/parsing/parsing.service';
+import { ConciliationService } from './modules/conciliation/conciliation.service';
+import { PinoLogger } from 'nestjs-pino';
 
 @Injectable()
 export class AppService { 
   constructor(
     private readonly llm: LlmOrchestratorService,
     private readonly sourceCheck: SourceCheckOrchestratorService,
-    // private readonly conciliation: ConciliationService,
+    private readonly parsing: ParsingService,
+    private readonly conciliation: ConciliationService,
+    private readonly logger: PinoLogger,
   ) {}
 
   async validateAddress(address: AddressDto): Promise<ValidatedAddressDto> {
-    
-    let confidenceRule = 0;
-    let ongoingAddress: ValidatedAddressDto = await this.parseText(address.address);
-    let isLLMAvailable = true;
-    let isGeoapifyAvailable = true;
+    // 1) Parsing (baseline)
+    const baseline = await this.parsing.validateAddressUsingParsing(address.address);
+    this.logger.info(baseline, 'Baseline result');
 
-    // while(confidenceRule < 90 && (isLLMAvailable || isGeoapifyAvailable)){
-      const addressValidationSource = await this.validationSource(ongoingAddress, address.address);
-      const addressValidationLLM = await this.validationLLM(ongoingAddress, address.address);
+    // 2) Source-check using original text and baseline
+    const source = await this.sourceCheck.validateAddressUsingSource(address.address, baseline);
+    this.logger.info(source, 'Source-check result');
 
-      // Conciliation placeholder: final business rules will reconcile baseline, source, and LLM.
-      // const reconciled = await this.conciliation.reconcile({
-      //   original: address.address,
-      //   baseline: ongoingAddress,
-      //   source: addressValidationSource,
-      //   llm: addressValidationLLM,
-      // });
-      // ongoingAddress = reconciled;
-      
+    // 3) Conciliation between parsing and source-check
+    const firstPass = await this.conciliation.reconcileWithMeta({
+      original: address.address,
+      baseline,
+      source,
+    });
 
-      console.log("ongoingAddress: ", ongoingAddress)
-      console.log("addressValidationSource: ", addressValidationSource)
-      console.log("addressValidationLLM: ", addressValidationLLM)
-      // if (addressValidationLLM) {
-      //   ongoingAddress = addressValidationLLM;
-      // }
-    // }
+    // If early-exit applied inside conciliation or all fields are resolved, return now
+    if (firstPass.unresolvedFields.length === 0) {
+      return firstPass.dto;
+    }
 
- 
-    return ongoingAddress;
+    // 4) Escalate to LLM only for ambiguous cases per rules
+    const llm = await this.llm.validateAddressUsingLLM(address.address, baseline);
+    this.logger.info(llm, 'LLM result');
+
+    // 5) When LLM is involved, convert LLM result to text and re-run source-check
+    const llmText = this.formatAddressAsText(llm);
+    const sourceAfterLlm = await this.sourceCheck.validateAddressUsingSource(llmText, llm);
+    this.logger.info(sourceAfterLlm, 'Source-check result after LLM');
+
+    // 6) Final conciliation: only LLM and (re)source-check are considered by service when LLM present
+    const finalPass = await this.conciliation.reconcileWithMeta({
+      original: address.address,
+      baseline, // retained for context; service ignores parsing weights when llm is present
+      source: sourceAfterLlm ?? source,
+      llm,
+    });
+
+    return finalPass.dto;
   }
 
-  private async parseText(address: string): Promise<ValidatedAddressDto> {
-    const parsedAddress = addressIt.default(address);
-    
-    const parsedText: ValidatedAddressDto = {
-      street: parsedAddress.street || '',
-      complement: parsedAddress.complement || '',
-      neighbourhood: parsedAddress.neighbourhood || '',
-      number: parsedAddress.number || 0,
-      city: parsedAddress.city || '',
-      state: parsedAddress.state || '',
-      zipCode: parsedAddress.postalcode || '',
-      type: 'unknown',
-      validationStatus: 'parsed'
-    };
-
-    return parsedText;
-  }
-
-  private async validationLLM(address: ValidatedAddressDto, original: string): Promise<ValidatedAddressDto> {
-    return this.llm.validateAddressUsingLLM(original, address);
-  }
-
-  private async validationSource(address: ValidatedAddressDto, original: string): Promise<ValidatedAddressDto> {
-    const validated = await this.sourceCheck.validateAddressUsingSource(original, address);
-    return validated;
+  // Convert a ValidatedAddressDto to a single-line textual address for source-check refetching
+  private formatAddressAsText(dto: ValidatedAddressDto): string {
+    return `${dto.street} ${dto.number ? String(dto.number) : ''}, ${dto.complement} - ${dto.city}, ${dto.state} - zip code ${dto.zipCode}`;
   }
 }
